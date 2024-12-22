@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control Panel</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .client { margin-bottom: 10px; }
+    .client button { margin-left: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Control Panel</h1>
+  <div id="clients"></div>
+  <script>
+    const socket = io();
+
+    // Update clients list
+    socket.on('update-clients', (clients) => {
+      const clientDiv = document.getElementById('clients');
+      clientDiv.innerHTML = '';
+      for (const id in clients) {
+        const client = clients[id];
+        const div = document.createElement('div');
+        div.className = 'client';
+        div.innerHTML = `
+          <strong>Client:</strong> ${id} <br>
+          <strong>User Agent:</strong> ${client.userAgent} <br>
+          <button onclick="sendCommand('${id}', 'alert(\\'Hello, World!\\')')">Send Alert</button>
+          <button onclick="sendCommand('${id}', 'console.log(\\'Executed Command!\\')')">Log to Console</button>
+        `;
+        clientDiv.appendChild(div);
+      }
+    });
+
+    // Send command to client
+    function sendCommand(id, command) {
+      socket.emit('send-command', { id, command });
+    }
+  </script>
+</body>
+</html>
