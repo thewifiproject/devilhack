@@ -1,90 +1,23 @@
-#include "kk5v.h"
-#include <fstream>
-#include <iostream>
-#include <sstream>
+#ifndef KK5V_H
+#define KK5V_H
 
-// XOR Encryption/Decryption
-std::vector<char> KK5V::xorEncryptDecrypt(const std::vector<char>& data, char key) {
-    std::vector<char> result(data.size());
-    for (size_t i = 0; i < data.size(); ++i) {
-        result[i] = data[i] ^ key;
-    }
-    return result;
-}
+#include <string>
+#include <vector>
 
-// Caesar Cipher Encryption/Decryption
-std::vector<char> KK5V::caesarEncryptDecrypt(const std::vector<char>& data, int shift) {
-    std::vector<char> result(data.size());
-    for (size_t i = 0; i < data.size(); ++i) {
-        result[i] = data[i] + shift;
-    }
-    return result;
-}
+class KK5V {
+public:
+    // XOR Encryption/Decryption
+    static std::vector<char> xorEncryptDecrypt(const std::vector<char>& data, char key);
 
-// KK5V Custom Encryption/Decryption
-std::vector<char> KK5V::kk5vEncryptDecrypt(const std::vector<char>& data, const std::string& key) {
-    std::vector<char> result(data.size());
-    size_t keyLength = key.length();
-    for (size_t i = 0; i < data.size(); ++i) {
-        char keyChar = key[i % keyLength];
-        result[i] = (data[i] ^ keyChar) + 1;  // XOR with key and apply transformation
-        result[i] = (result[i] << 1) | (result[i] >> 7);  // Rotate bits
-    }
-    return result;
-}
+    // Caesar Cipher Encryption/Decryption
+    static std::vector<char> caesarEncryptDecrypt(const std::vector<char>& data, int shift);
 
-// Encrypt file with XOR, Caesar, and KK5V
-void KK5V::encryptFile(const std::string& filePath, char xorKey, int caesarShift, const std::string& kk5vKey) {
-    std::ifstream inputFile(filePath, std::ios::binary);
-    if (!inputFile) {
-        std::cerr << "Failed to open file for reading: " << filePath << std::endl;
-        return;
-    }
+    // KK5V Custom Encryption
+    static std::vector<char> kk5vEncryptDecrypt(const std::vector<char>& data, const std::string& key);
 
-    std::vector<char> fileData((std::istreambuf_iterator<char>(inputFile)), std::istreambuf_iterator<char>());
+    // Main method to encrypt file with XOR, Caesar, and KK5V
+    static void encryptFile(const std::string& filePath, char xorKey, int caesarShift, const std::string& kk5vKey);
+    static void decryptFile(const std::string& filePath, char xorKey, int caesarShift, const std::string& kk5vKey);
+};
 
-    // Apply XOR encryption
-    fileData = xorEncryptDecrypt(fileData, xorKey);
-
-    // Apply Caesar Cipher encryption
-    fileData = caesarEncryptDecrypt(fileData, caesarShift);
-
-    // Apply KK5V custom encryption
-    fileData = kk5vEncryptDecrypt(fileData, kk5vKey);
-
-    // Write encrypted data back to the file
-    std::ofstream outputFile(filePath, std::ios::binary);
-    if (!outputFile) {
-        std::cerr << "Failed to open file for writing: " << filePath << std::endl;
-        return;
-    }
-    outputFile.write(fileData.data(), fileData.size());
-}
-
-// Decrypt file with XOR, Caesar, and KK5V
-void KK5V::decryptFile(const std::string& filePath, char xorKey, int caesarShift, const std::string& kk5vKey) {
-    std::ifstream inputFile(filePath, std::ios::binary);
-    if (!inputFile) {
-        std::cerr << "Failed to open file for reading: " << filePath << std::endl;
-        return;
-    }
-
-    std::vector<char> fileData((std::istreambuf_iterator<char>(inputFile)), std::istreambuf_iterator<char>());
-
-    // Apply reverse KK5V custom decryption
-    fileData = kk5vEncryptDecrypt(fileData, kk5vKey);
-
-    // Apply reverse Caesar Cipher decryption
-    fileData = caesarEncryptDecrypt(fileData, -caesarShift);
-
-    // Apply reverse XOR decryption
-    fileData = xorEncryptDecrypt(fileData, xorKey);
-
-    // Write decrypted data back to the file
-    std::ofstream outputFile(filePath, std::ios::binary);
-    if (!outputFile) {
-        std::cerr << "Failed to open file for writing: " << filePath << std::endl;
-        return;
-    }
-    outputFile.write(fileData.data(), fileData.size());
-}
+#endif // KK5V_H
