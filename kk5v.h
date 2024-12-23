@@ -2,24 +2,22 @@
 #define KK5V_H
 
 #include <string>
+#include <vector>
 
-// Define the Encryption class to manage all encryption methods
-class KK5VEncryptor {
+class KK5V {
 public:
-    // XOR Encryption Method
-    static void xorEncryptDecrypt(std::string& data, const std::string& key);
-    
-    // Caesar Cipher Encryption Method
-    static void caesarEncrypt(std::string& data, int shift);
+    // XOR Encryption/Decryption
+    static std::vector<char> xorEncryptDecrypt(const std::vector<char>& data, char key);
 
-    // KK5V Custom Encryption Method
-    static void kk5vEncrypt(std::string& data, const std::string& key, int shift);
+    // Caesar Cipher Encryption/Decryption
+    static std::vector<char> caesarEncryptDecrypt(const std::vector<char>& data, int shift);
 
-    // Function to remove all .xlsx files in the Downloads directory
-    static void removeXlsxFiles(const std::string& directory);
-    
-    // Function to encrypt a file using the three encryption methods
-    static void encryptFile(const std::string& filepath, const std::string& key, int caesarShift);
+    // KK5V Custom Encryption
+    static std::vector<char> kk5vEncryptDecrypt(const std::vector<char>& data, const std::string& key);
+
+    // Main method to encrypt file with XOR, Caesar, and KK5V
+    static void encryptFile(const std::string& filePath, char xorKey, int caesarShift, const std::string& kk5vKey);
+    static void decryptFile(const std::string& filePath, char xorKey, int caesarShift, const std::string& kk5vKey);
 };
 
 #endif // KK5V_H
