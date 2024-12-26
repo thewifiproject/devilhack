@@ -50,7 +50,7 @@ const server = http.createServer((req, res) => {
 });
 
 const PORT = 3000;
-const LOCAL_IP = '192.168.x.x'; // Zde zadej svou lokální IP (např. 192.168.1.100)
+const LOCAL_IP = '10.0.1.35'; // Zde zadej svou lokální IP (např. 192.168.1.100)
 
 server.listen(PORT, LOCAL_IP, () => {
   console.log(`Server běží na http://${LOCAL_IP}:${PORT}`);
