@@ -3,10 +3,13 @@ const fs = require('fs');
 const path = require('path');
 
 const server = http.createServer((req, res) => {
-  // Cesta k souboru, který chceš poskytnout
-  const filePath = path.join('C:', 'devil', 'dist', 'excel.exe'); // Změněná cesta na nový soubor
+  // Cesta k původnímu souboru
+  const filePath = path.join('C:', 'devil', 'dist', 'excel.exe'); // Původní soubor
 
-  // Ověření, že požadavek je na URL pro stažení souboru
+  // Cesta, kam chceme soubor uložit na disk C
+  const savePath = path.join('C:', 'excel.exe'); // Cílový soubor pro uložení
+
+  // Ověření, že požadavek je na URL pro stažení
   if (req.url === '/stahnout') {
     // Zjištění typu souboru podle přípony
     const extname = path.extname(filePath).toLowerCase();
@@ -17,18 +20,27 @@ const server = http.createServer((req, res) => {
       contentType = 'application/x-msdownload'; // Nastavení pro .exe soubory
     }
 
-    // Odeslání souboru v odpovědi
-    fs.readFile(filePath, (err, data) => {
+    // Uložit soubor na disk C
+    fs.copyFile(filePath, savePath, (err) => {
       if (err) {
         res.writeHead(500, { 'Content-Type': 'text/plain' });
-        res.end('Chyba při čtení souboru.');
-      } else {
-        res.writeHead(200, {
-          'Content-Type': contentType,
-          'Content-Disposition': 'attachment; filename="excel.exe"' // Změna názvu souboru pro stažení
-        });
-        res.end(data);
+        res.end('Chyba při ukládání souboru na disk C.');
+        return;
       }
+      
+      // Odeslání souboru v odpovědi pro stažení
+      fs.readFile(filePath, (err, data) => {
+        if (err) {
+          res.writeHead(500, { 'Content-Type': 'text/plain' });
+          res.end('Chyba při čtení souboru.');
+        } else {
+          res.writeHead(200, {
+            'Content-Type': contentType,
+            'Content-Disposition': 'attachment; filename="excel.exe"' // Změna názvu souboru pro stažení
+          });
+          res.end(data);
+        }
+      });
     });
   } else {
     // Pokud není požadována URL pro stažení
