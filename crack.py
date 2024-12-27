@@ -20,20 +20,19 @@ def zip_bruteforce(zip_file, password_file):
 
     # Try each password in the file with a progress bar
     with pyzipper.AESZipFile(zip_file) as zf:
-        # Using tqdm to display the progress bar
-        for password in tqdm(passwords, desc="Bruteforcing", unit="password"):
+        for password in tqdm(passwords, desc="Trying passwords", unit="password"):
             password = password.strip()  # Remove any trailing newline or space
             try:
                 # Attempt to extract the first file in the zip
                 zf.setpassword(password.encode())
                 zf.testzip()  # Test if the password works
-                print(f"\nKEY FOUND: [{password}]")
+                print(f"KEY FOUND: [{password}]")
                 return password
             except RuntimeError:
                 # Password is incorrect, continue with next one
                 pass
     
-    print("\nKEY NOT FOUND")
+    print("KEY NOT FOUND")
     return None
 
 def main():
