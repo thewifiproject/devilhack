@@ -1,6 +1,8 @@
 import pyzipper
 import os
 import argparse
+from tqdm import tqdm
+from itertools import islice
 
 # Function to read passwords lazily (for large wordlists)
 def read_passwords(wordlist_path, chunk_size=100):
@@ -16,12 +18,14 @@ def brute_force_zip(zip_file_path, wordlist_path, extraction_path):
     failed_attempts = []  # List to store failed attempts for one line of output
     with pyzipper.AESZipFile(zip_file_path) as zf:
         with open(wordlist_path, 'r', encoding='utf-8', errors='ignore') as wordlist_file:
-            for line in wordlist_file:
+            wordlist_lines = wordlist_file.readlines()
+            total_lines = len(wordlist_lines)
+            for line in tqdm(wordlist_lines, desc="Cracking ZIP password", total=total_lines):
                 password_str = line.strip()  # Remove any leading/trailing whitespace (e.g., newlines)
                 try:
                     zf.pwd = password_str.encode('utf-8')
                     zf.extractall(path=extraction_path)
-                    print(f"KEY FOUND: {password_str}")
+                    print(f"Password found: {password_str}")
                     return password_str
                 except RuntimeError:
                     failed_attempts.append(password_str)  # Append failed attempt to the list
@@ -34,7 +38,7 @@ def brute_force_zip(zip_file_path, wordlist_path, extraction_path):
     if failed_attempts:
         print(f"Attempt Failed: {' '.join(failed_attempts)}")  # Join all failed attempts into one line
     else:
-        print("KEY NOT FOUND")
+        print("Password not found in the wordlist")
 
 # Setting up argparse for command-line usage
 def main():
