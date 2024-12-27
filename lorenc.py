@@ -5,8 +5,8 @@ import sys
 
 def brute_force_zip(zip_file, wordlist_file):
     try:
-        # Open the zip file
-        with pyzipper.AESZipFile(zip_file) as zipf:
+        # Open the zip file using pyzipper.ZipFile
+        with pyzipper.ZipFile(zip_file) as zipf:
             # Read wordlist
             with open(wordlist_file, 'r', encoding='utf-8') as wordlist:
                 passwords = wordlist.readlines()
