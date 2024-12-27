@@ -1,7 +1,7 @@
 import pyzipper
 import sys
 import argparse
-import os  # Import os to check if the file exists
+import os
 
 def zip_bruteforce(zip_file, password_file):
     # Check if the ZIP file exists
@@ -24,12 +24,16 @@ def zip_bruteforce(zip_file, password_file):
             try:
                 # Attempt to extract the first file in the ZIP
                 zf.setpassword(password.encode())
-                # Test if the password works
-                zf.testzip()
+                file_list = zf.namelist()  # Get the list of files in the ZIP
+                if not file_list:
+                    raise ValueError("Empty ZIP file or invalid contents.")
+                
+                # Extract a single file as a test
+                zf.read(file_list[0])  
                 print(f"KEY FOUND: [{password}]")
                 return password
-            except (RuntimeError, pyzipper.BadZipFile):
-                # Password is incorrect or ZIP is invalid, continue with next one
+            except (RuntimeError, pyzipper.BadZipFile, ValueError):
+                # Password is incorrect, continue to the next one
                 pass
             except Exception as e:
                 print(f"Unexpected error: {e}")
@@ -39,7 +43,7 @@ def zip_bruteforce(zip_file, password_file):
 
 def main():
     # Set up the argument parser
-    parser = argparse.ArgumentParser(description="Brute-force a password protected ZIP file using a list of passwords.")
+    parser = argparse.ArgumentParser(description="Brute-force a password-protected ZIP file using a list of passwords.")
     
     # Define command-line arguments
     parser.add_argument("zip_file", help="The path to the ZIP file to crack.")
