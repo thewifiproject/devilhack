@@ -1,4 +1,4 @@
-import pyzipper
+import zipfile
 import tqdm
 import argparse
 
@@ -11,7 +11,7 @@ def brute_force_zip(zip_file, wordlist_file):
     wordlist = [word.strip() for word in wordlist]
 
     # Open ZIP file
-    with pyzipper.AESZipFile(zip_file) as zf:
+    with zipfile.ZipFile(zip_file) as zf:
         # Use tqdm to display progress bar
         for password in tqdm.tqdm(wordlist, desc="Brute-forcing"):
             try:
