@@ -1,42 +1,67 @@
 import pyzipper
+import os
 import argparse
-from tqdm import tqdm
 
-def brute_force_zip(zip_file, wordlist_file):
-    try:
-        with open(wordlist_file, 'r') as wordlist:
-            wordlist_lines = wordlist.readlines()  # Read all lines to count them
-            total_words = len(wordlist_lines)  # Total words for the progress bar
-            
-            # Use tqdm to wrap the wordlist and show progress
-            for password in tqdm(wordlist_lines, total=total_words, desc="Cracking zip", ncols=100):
-                password = password.strip()
+# Function to read passwords lazily (for large wordlists)
+def read_passwords(wordlist_path, chunk_size=100):
+    with open(wordlist_path, 'r', encoding='utf-8', errors='ignore') as f:
+        while True:
+            chunk = list(islice(f, chunk_size))
+            if not chunk:
+                break
+            yield [line.strip() for line in chunk]
+
+# Brute force for ZIP file
+def brute_force_zip(zip_file_path, wordlist_path, extraction_path):
+    failed_attempts = []  # List to store failed attempts for one line of output
+    with pyzipper.AESZipFile(zip_file_path) as zf:
+        with open(wordlist_path, 'r', encoding='utf-8', errors='ignore') as wordlist_file:
+            for line in wordlist_file:
+                password_str = line.strip()  # Remove any leading/trailing whitespace (e.g., newlines)
                 try:
-                    with pyzipper.AESZipFile(zip_file) as zf:
-                        zf.pwd = password.encode('utf-8')  # Set the password
-                        zf.test()  # Test if the password works
-                        print(f"\nKEY FOUND: [{password}]")  # Print if the password is correct
-                        return
+                    zf.pwd = password_str.encode('utf-8')
+                    zf.extractall(path=extraction_path)
+                    print(f"KEY FOUND: {password_str}")
+                    return password_str
                 except RuntimeError:
-                    continue  # Incorrect password, try the next one
+                    failed_attempts.append(password_str)  # Append failed attempt to the list
+                    continue
+                except Exception as e:
+                    print(f"Error for: {password_str}, Error: {e}")
+                    continue
 
-        print("\nKEY NOT FOUND")  # If no password is found after trying all
-    except FileNotFoundError:
-        print(f"ERROR: Wordlist file '{wordlist_file}' not found.")
-    except Exception as e:
-        print(f"ERROR: {e}")
+    # Print all failed attempts in a single line after trying all passwords
+    if failed_attempts:
+        print(f"Attempt Failed: {' '.join(failed_attempts)}")  # Join all failed attempts into one line
+    else:
+        print("KEY NOT FOUND")
 
+# Setting up argparse for command-line usage
 def main():
-    # Setup argument parser
-    parser = argparse.ArgumentParser(description="Brute-force cracker for encrypted zip files")
-    parser.add_argument('zip_file', help="The path to the zip file to crack")
-    parser.add_argument('-P', '--wordlist', required=True, help="Path to the wordlist file")
-    
-    # Parse arguments
+    parser = argparse.ArgumentParser(description='Brute force a ZIP file password using a wordlist.')
+    parser.add_argument('-z', '--zip', required=True, help='Path to the ZIP file')
+    parser.add_argument('wordlist', help='Path to the wordlist file')
+    parser.add_argument('-e', '--extract', help='Path to extract the ZIP file contents')
+
     args = parser.parse_args()
 
-    # Call the brute force function
-    brute_force_zip(args.zip_file, args.wordlist)
+    # Ensure the wordlist exists
+    if not os.path.exists(args.wordlist):
+        print(f"Error: Wordlist file '{args.wordlist}' not found.")
+        return
+
+    # Ensure the ZIP file exists
+    if not os.path.exists(args.zip):
+        print(f"Error: ZIP file '{args.zip}' not found.")
+        return
+
+    # Set extraction path if not provided
+    if not args.extract:
+        args.extract = os.path.dirname(args.zip)
+
+    # Perform ZIP cracking
+    print(f"[*] Cracking ZIP file: {args.zip} using wordlist: {args.wordlist}")
+    brute_force_zip(args.zip, args.wordlist, args.extract)
 
 if __name__ == "__main__":
     main()
