@@ -6,7 +6,12 @@ import threading
 import queue
 from tqdm import tqdm  # Import tqdm for progress bar
 
+# Flag to stop threads once the key is found
+password_found = False
+password_lock = threading.Lock()
+
 def zip_bruteforce(zip_file, password_file, num_threads=4):
+    global password_found
     # Check if the zip file exists
     if not os.path.isfile(zip_file):
         print(f"NO ZIP FILE NAMED {zip_file} FOUND!")
@@ -29,15 +34,19 @@ def zip_bruteforce(zip_file, password_file, num_threads=4):
 
     # Function to try passwords in parallel
     def try_passwords():
+        global password_found
         with pyzipper.AESZipFile(zip_file) as zf:
-            while not password_queue.empty():
+            while not password_queue.empty() and not password_found:
                 password = password_queue.get()
                 try:
                     # Attempt to extract the first file in the zip
                     zf.setpassword(password.encode())
                     zf.testzip()  # Test if the password works
-                    print(f"KEY FOUND: [{password}]")
-                    sys.exit(0)  # Stop the program once the password is found
+                    with password_lock:
+                        if not password_found:
+                            print(f"KEY FOUND: [{password}]")
+                            password_found = True
+                            sys.exit(0)  # Stop the program once the password is found
                 except RuntimeError:
                     pass
 
@@ -58,7 +67,8 @@ def zip_bruteforce(zip_file, password_file, num_threads=4):
         for thread in threads:
             thread.join()
 
-    print("KEY NOT FOUND")
+    if not password_found:
+        print("KEY NOT FOUND")
 
 def main():
     # Set up the argument parser
